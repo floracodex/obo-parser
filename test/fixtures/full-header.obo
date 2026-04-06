@@ -1,0 +1,20 @@
+format-version: 1.2
+data-version: releases/2026-03-01
+date: 01:03:2026 12:00
+saved-by: curator
+ontology: po
+default-namespace: plant_ontology
+remark: This is a test ontology
+remark: Second remark
+import: http://purl.obolibrary.org/obo/ro.obo
+subsetdef: slim_plant "Plant slim"
+synonymtypedef: systematic_synonym "Systematic synonym" EXACT
+idspace: PO urn:lsid:bioontology.org:PO: "Plant Ontology"
+treat-xrefs-as-equivalent: CL
+treat-xrefs-as-is_a: GO
+owl-axioms: Prefix(owl:=<http://www.w3.org/2002/07/owl#>)
+property_value: http://purl.org/dc/terms/license http://creativecommons.org/licenses/by/4.0/
+
+[Term]
+id: PO:0009025
+name: vascular leaf

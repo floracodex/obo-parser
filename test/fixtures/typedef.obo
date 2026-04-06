@@ -1,0 +1,24 @@
+format-version: 1.2
+ontology: test
+
+[Typedef]
+id: part_of
+name: part of
+namespace: external
+def: "A core relation that holds between a part and its whole." [RO:0000050]
+is_transitive: true
+is_reflexive: true
+inverse_of: has_part
+domain: BFO:0000001
+range: BFO:0000001
+xref: RO:0000050
+synonym: "part of" EXACT []
+holds_over_chain: has_part part_of
+
+[Typedef]
+id: has_part
+name: has part
+is_transitive: true
+inverse_of: part_of
+is_metadata_tag: false
+is_class_level: true
