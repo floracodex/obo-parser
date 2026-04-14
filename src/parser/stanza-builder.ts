@@ -121,6 +121,7 @@ function applyCommonTag(fields: CommonFields, tag: string, value: string): boole
 export function buildTerm(tags: OboTagValue[]): OboTerm {
     const common = createCommonFields();
     const term: Omit<OboTerm, keyof CommonFields> = {
+        builtin: false,
         isA: [],
         relationships: [],
         intersectionOf: [],
@@ -133,6 +134,9 @@ export function buildTerm(tags: OboTagValue[]): OboTerm {
         if (applyCommonTag(common, tag, value)) { continue; }
 
         switch (tag) {
+            case 'builtin':
+                term.builtin = value === 'true';
+                break;
             case 'is_a':
                 term.isA.push(parseIsA(value));
                 break;
@@ -166,6 +170,7 @@ export function buildTerm(tags: OboTagValue[]): OboTerm {
 export function buildTypedef(tags: OboTagValue[]): OboTypedef {
     const common = createCommonFields();
     const extra = {
+        builtin: false,
         isA: [] as OboTypedef['isA'],
         relationships: [] as OboTypedef['relationships'],
         intersectionOf: [] as OboTypedef['intersectionOf'],
@@ -196,6 +201,9 @@ export function buildTypedef(tags: OboTagValue[]): OboTypedef {
         if (applyCommonTag(common, tag, value)) { continue; }
 
         switch (tag) {
+            case 'builtin':
+                extra.builtin = value === 'true';
+                break;
             case 'is_a':
                 extra.isA.push(parseIsA(value));
                 break;

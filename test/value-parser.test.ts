@@ -57,6 +57,16 @@ describe('parseQuotedString', () => {
         expect(end).toBe(2);
     });
 
+    it('resolves \\: escape to colon', () => {
+        const {value} = parseQuotedString('"a\\:b"', 0);
+        expect(value).toBe('a:b');
+    });
+
+    it('resolves \\! escape to exclamation mark', () => {
+        const {value} = parseQuotedString('"a\\!b"', 0);
+        expect(value).toBe('a!b');
+    });
+
     it('throws OboParseError on incomplete \\x escape', () => {
         expect(() => parseQuotedString('"abc\\x"', 0)).toThrow(OboParseError);
         expect(() => parseQuotedString('"abc\\x4"', 0)).toThrow(OboParseError);

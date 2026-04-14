@@ -202,6 +202,17 @@ describe('buildTerm', () => {
         ]);
     });
 
+    it('handles builtin flag', () => {
+        const term = buildTerm([
+            {tag: 'id', value: 'OBO:0001'},
+            {tag: 'builtin', value: 'true'}
+        ]);
+        expect(term.builtin).toBe(true);
+
+        const term2 = buildTerm([{tag: 'id', value: 'TEST:0001'}]);
+        expect(term2.builtin).toBe(false);
+    });
+
     it('handles union_of, equivalent_to, and disjoint_from with qualifiers', () => {
         const term = buildTerm([
             {tag: 'id', value: 'GO:0006915'},

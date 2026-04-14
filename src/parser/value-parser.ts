@@ -66,6 +66,12 @@ export function parseQuotedString(
                 case 't':
                     chunks.push('\t');
                     break;
+                case ':':
+                    chunks.push(':');
+                    break;
+                case '!':
+                    chunks.push('!');
+                    break;
                 case 'x': {
                     if (i + 2 >= input.length) {
                         throw new OboParseError(

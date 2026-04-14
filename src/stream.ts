@@ -148,6 +148,12 @@ async function* splitLines(
         }
     }
 
+    // Flush any incomplete multi-byte sequence from the decoder
+    const trailing = decoder.decode();
+    if (trailing.length > 0) {
+        buffer += trailing;
+    }
+
     // Flush remaining content
     if (buffer.length > 0) {
         if (buffer.endsWith('\r')) {

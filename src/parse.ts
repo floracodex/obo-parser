@@ -10,7 +10,9 @@ import {buildTerm, buildTypedef, buildInstance} from './parser/stanza-builder.js
  * @returns A typed OboDocument with header, terms, typedefs, and instances.
  */
 export function parseObo(text: string): OboDocument {
-    const lines = parseLines(text);
+    // Strip UTF-8 BOM if present
+    const input = text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
+    const lines = parseLines(input);
 
     const headerTags: OboTagValue[] = [];
     const stanzas: {stanzaType: string; tags: OboTagValue[]}[] = [];
