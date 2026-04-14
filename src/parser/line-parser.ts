@@ -1,47 +1,126 @@
 export type LogicalLine =
-  | { type: 'tag'; tag: string; value: string }
-  | { type: 'stanza-header'; stanzaType: string }
-  | { type: 'blank' };
+  | {type: 'tag'; tag: string; value: string}
+  | {type: 'stanza-header'; stanzaType: string}
+  | {type: 'blank'};
 
 /**
  * Strip a trailing `! comment` from a raw value string.
  *
- * Comments are only recognized outside of quoted strings.  A `!` inside
+ * Comments are only recognized outside of quoted strings. A `!` inside
  * double quotes is part of the value, not a comment delimiter.
  */
 export function stripTrailingComment(raw: string): string {
-  let inQuote = false;
-  let escaped = false;
+    let inQuote = false;
+    let escaped = false;
 
-  for (let i = 0; i < raw.length; i++) {
-    const ch = raw[i];
+    for (let i = 0; i < raw.length; i++) {
+        const ch = raw[i];
 
-    if (escaped) {
-      escaped = false;
-      continue;
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+
+        if (ch === '\\') {
+            escaped = true;
+            continue;
+        }
+
+        if (ch === '"') {
+            inQuote = !inQuote;
+            continue;
+        }
+
+        if (!inQuote && ch === '!') {
+            let end = i;
+            while (end > 0 && (raw[end - 1] === ' ' || raw[end - 1] === '\t')) {
+                end--;
+            }
+            return raw.slice(0, end);
+        }
     }
 
-    if (ch === '\\') {
-      escaped = true;
-      continue;
+    return raw;
+}
+
+/**
+ * Stateful line accumulator that handles continuation lines and produces
+ * LogicalLine objects. Shared by both the string and streaming parsers to
+ * avoid duplicating line-level parsing logic.
+ */
+export class LineAccumulator {
+    private pendingTag: string | null = null;
+    private pendingValue: string | null = null;
+
+    /**
+   * Feed a single raw line (no line terminators) into the accumulator.
+   * Returns zero or more logical lines produced by this raw line.
+   */
+    feed(raw: string): LogicalLine[] {
+        const results: LogicalLine[] = [];
+
+        // Full-line comment
+        if (raw.startsWith('!')) {
+            return results;
+        }
+
+        // Blank line
+        if (raw.trim() === '') {
+            this.flushPendingInto(results);
+            results.push({type: 'blank'});
+            return results;
+        }
+
+        // Continuation line: starts with whitespace and we have a pending tag
+        if ((raw[0] === ' ' || raw[0] === '\t') && this.pendingTag !== null) {
+            this.pendingValue += ` ${  raw.trimStart()}`;
+            return results;
+        }
+
+        // Stanza header
+        const stanzaMatch = raw.match(/^\[(\w+)\]\s*$/);
+        if (stanzaMatch?.[1]) {
+            this.flushPendingInto(results);
+            results.push({type: 'stanza-header', stanzaType: stanzaMatch[1]});
+            return results;
+        }
+
+        // Tag-value pair: first colon separates tag from value
+        const colonIdx = raw.indexOf(':');
+        if (colonIdx !== -1) {
+            this.flushPendingInto(results);
+            this.pendingTag = raw.slice(0, colonIdx).trim();
+            const afterColon = raw.slice(colonIdx + 1);
+            this.pendingValue = afterColon.startsWith(' ') ? afterColon.slice(1) : afterColon;
+            return results;
+        }
+
+        // Fallback: unrecognized line — flush and skip
+        this.flushPendingInto(results);
+        return results;
     }
 
-    if (ch === '"') {
-      inQuote = !inQuote;
-      continue;
+    /**
+   * Flush any remaining pending tag-value pair. Call this after all lines
+   * have been fed to emit the final logical line.
+   */
+    flush(): LogicalLine[] {
+        const results: LogicalLine[] = [];
+        this.flushPendingInto(results);
+        return results;
     }
 
-    if (!inQuote && ch === '!') {
-      // Walk backwards to trim whitespace before the `!`
-      let end = i;
-      while (end > 0 && (raw[end - 1] === ' ' || raw[end - 1] === '\t')) {
-        end--;
-      }
-      return raw.slice(0, end);
+    private flushPendingInto(results: LogicalLine[]): void {
+        if (this.pendingTag !== null && this.pendingValue !== null) {
+            results.push({
+                type: 'tag',
+                tag: this.pendingTag,
+                value: stripTrailingComment(this.pendingValue)
+            });
+            this.pendingTag = null;
+            this.pendingValue = null;
+        }
     }
-  }
-
-  return raw;
 }
 
 /**
@@ -56,66 +135,14 @@ export function stripTrailingComment(raw: string): string {
  * - Trailing `! comments` stripped from values
  */
 export function parseLines(text: string): LogicalLine[] {
-  const rawLines = text.split(/\r?\n/);
-  const results: LogicalLine[] = [];
+    const rawLines = text.split(/\r?\n/);
+    const accumulator = new LineAccumulator();
+    const results: LogicalLine[] = [];
 
-  let pendingTag: string | null = null;
-  let pendingValue: string | null = null;
-
-  function flushPending(): void {
-    if (pendingTag !== null && pendingValue !== null) {
-      results.push({
-        type: 'tag',
-        tag: pendingTag,
-        value: stripTrailingComment(pendingValue),
-      });
-      pendingTag = null;
-      pendingValue = null;
-    }
-  }
-
-  for (const raw of rawLines) {
-    // Full-line comment
-    if (raw.startsWith('!')) {
-      continue;
+    for (const raw of rawLines) {
+        results.push(...accumulator.feed(raw));
     }
 
-    // Blank line
-    if (raw.trim() === '') {
-      flushPending();
-      results.push({ type: 'blank' });
-      continue;
-    }
-
-    // Continuation line: starts with whitespace and we have a pending tag
-    if ((raw[0] === ' ' || raw[0] === '\t') && pendingTag !== null) {
-      pendingValue += ' ' + raw.trimStart();
-      continue;
-    }
-
-    // Stanza header
-    const stanzaMatch = raw.match(/^\[(\w+)\]\s*$/);
-    if (stanzaMatch) {
-      flushPending();
-      results.push({ type: 'stanza-header', stanzaType: stanzaMatch[1] });
-      continue;
-    }
-
-    // Tag-value pair: first colon separates tag from value
-    const colonIdx = raw.indexOf(':');
-    if (colonIdx !== -1) {
-      flushPending();
-      pendingTag = raw.slice(0, colonIdx).trim();
-      // Value starts after the colon; strip one leading space if present
-      const afterColon = raw.slice(colonIdx + 1);
-      pendingValue = afterColon.startsWith(' ') ? afterColon.slice(1) : afterColon;
-      continue;
-    }
-
-    // Fallback: unrecognized line — flush and skip
-    flushPending();
-  }
-
-  flushPending();
-  return results;
+    results.push(...accumulator.flush());
+    return results;
 }

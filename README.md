@@ -1,17 +1,17 @@
-# obo-parser
+# @floracodex/obo-parser
 
 A spec-complete [OBO 1.4 format](https://owlcollab.github.io/oboformat/doc/obo-syntax.html) parser for TypeScript/JavaScript. Parses [OBO Foundry](https://obofoundry.org/) ontology files (Plant Ontology, Gene Ontology, Trait Ontology, PATO, ENVO, and others) into fully typed objects.
 
 - **Streaming and string APIs** — parse large ontologies without buffering the whole file, or parse small files synchronously
 - **Complete OBO 1.4 coverage** — all stanza types (`[Term]`, `[Typedef]`, `[Instance]`), all tags, qualifier blocks, xref lists, synonym scopes, multi-line values, escape sequences
-- **Full TypeScript types** — every OBO construct has a corresponding interface
+- **Full TypeScript types** — every OBO construct has a corresponding interface with JSDoc documentation
 - **Zero runtime dependencies**
 - **Node.js + browser compatible** (string API works everywhere; streaming API needs async iterables)
 
 ## Install
 
 ```bash
-npm install obo-parser
+npm install @floracodex/obo-parser
 ```
 
 ## Usage
@@ -21,16 +21,16 @@ npm install obo-parser
 Parse an entire OBO file from a string:
 
 ```typescript
-import { parseObo } from 'obo-parser';
+import { parseObo } from '@floracodex/obo-parser';
 import { readFileSync } from 'fs';
 
 const doc = parseObo(readFileSync('./po.obo', 'utf-8'));
 
-console.log(doc.header.ontology);     // "po"
-console.log(doc.terms.length);        // ~2000
+console.log(doc.header.ontology); // "po"
+console.log(doc.terms.length); // ~2000
 
 for (const term of doc.terms) {
-  console.log(term.id, term.name);    // "PO:0009025" "vascular leaf"
+  console.log(term.id, term.name); // "PO:0009025" "vascular leaf"
 
   for (const parent of term.isA) {
     console.log(`  is_a: ${parent.target}`);
@@ -47,7 +47,7 @@ for (const term of doc.terms) {
 Parse stanza by stanza from a stream — useful for large ontologies or network sources:
 
 ```typescript
-import { parseOboStream } from 'obo-parser';
+import { parseOboStream } from '@floracodex/obo-parser';
 import { createReadStream } from 'fs';
 
 for await (const item of parseOboStream(createReadStream('./envo.obo'))) {
@@ -94,26 +94,45 @@ type OboStanza =
   | { type: 'instance'; instance: OboInstance };
 ```
 
+### `OboParseError`
+
+All parse errors throw `OboParseError`, which extends `Error` with additional context:
+
+```typescript
+import { OboParseError } from '@floracodex/obo-parser';
+
+try {
+  parseObo(malformedContent);
+} catch (e) {
+  if (e instanceof OboParseError) {
+    console.error(e.message); // Human-readable error message
+    console.error(e.tag); // The tag being parsed (e.g., "synonym"), or null
+    console.error(e.rawValue); // The raw value that failed to parse, or null
+  }
+}
+```
+
 ## Types
 
 All types are exported from the package:
 
-| Type | Description |
-|---|---|
-| `OboDocument` | Full parsed document (header + all stanzas) |
-| `OboHeader` | Header metadata (format version, ontology, subsets, imports, etc.) |
-| `OboTerm` | `[Term]` stanza — id, name, definition, synonyms, is_a, relationships, etc. |
-| `OboTypedef` | `[Typedef]` stanza — relationship properties (transitivity, symmetry, domain/range, etc.) |
-| `OboInstance` | `[Instance]` stanza — individual instances of classes |
-| `OboStanza` | Discriminated union yielded by the streaming API |
-| `OboDefinition` | Definition text + xref list |
-| `OboSynonym` | Synonym text, scope (EXACT/BROAD/NARROW/RELATED), type, xrefs |
-| `OboXref` | Cross-reference (id + optional description) |
-| `OboIsA` | is_a relationship (target + optional qualifiers) |
-| `OboRelationship` | Named relationship (predicate + target + optional qualifiers) |
-| `OboIntersection` | intersection_of component (optional predicate + target) |
-| `OboPropertyValue` | Property-value annotation (property + value + optional datatype) |
-| `OboQualifier` | Qualifier key-value pair from `{key="value"}` blocks |
+| Type               | Description                                                                               |
+| ------------------ | ----------------------------------------------------------------------------------------- |
+| `OboDocument`      | Full parsed document (header + all stanzas)                                               |
+| `OboHeader`        | Header metadata (format version, ontology, subsets, imports, etc.)                        |
+| `OboTerm`          | `[Term]` stanza — id, name, definition, synonyms, is_a, relationships, etc.               |
+| `OboTypedef`       | `[Typedef]` stanza — relationship properties (transitivity, symmetry, domain/range, etc.) |
+| `OboInstance`      | `[Instance]` stanza — individual instances of classes                                     |
+| `OboStanza`        | Discriminated union yielded by the streaming API                                          |
+| `OboDefinition`    | Definition text + xref list                                                               |
+| `OboSynonym`       | Synonym text, scope (EXACT/BROAD/NARROW/RELATED), type, xrefs                             |
+| `OboXref`          | Cross-reference (id + optional description)                                               |
+| `OboIsA`           | is_a relationship (target + optional qualifiers)                                          |
+| `OboRelationship`  | Named relationship (predicate + target + optional qualifiers)                             |
+| `OboIntersection`  | intersection_of component (optional predicate + target)                                   |
+| `OboPropertyValue` | Property-value annotation (property + value + optional datatype)                          |
+| `OboQualifier`     | Qualifier key-value pair from `{key="value"}` blocks                                      |
+| `OboParseError`    | Error class thrown on malformed input, with tag and raw value context                     |
 
 ## Format coverage
 
