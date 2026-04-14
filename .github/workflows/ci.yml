@@ -34,6 +34,12 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
+      - name: Download test ontologies
+        run: |
+          curl -sL -o test/integration/uo.obo https://purl.obolibrary.org/obo/uo.obo
+          curl -sL -o test/integration/go.obo https://purl.obolibrary.org/obo/go/go-basic.obo
+          curl -sL -o test/integration/po.obo https://purl.obolibrary.org/obo/po.obo
+          curl -sL -o test/integration/pato.obo https://purl.obolibrary.org/obo/pato.obo
       - run: npm test
 
   build:
