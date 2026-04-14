@@ -11,6 +11,16 @@ function oboPath(name: string): string {
 
 const describeIfFile = (path: string) => (existsSync(path) ? describe : describe.skip);
 
+function lazyRead(path: string): () => string {
+    let cached: string | undefined;
+    return () => {
+        if (cached === undefined) {
+            cached = readFileSync(path, 'utf-8');
+        }
+        return cached;
+    };
+}
+
 async function collectStanzas(input: AsyncGenerator<OboStanza>): Promise<OboStanza[]> {
     const results: OboStanza[] = [];
     for await (const stanza of input) {
@@ -28,26 +38,26 @@ async function* singleChunk(text: string): AsyncGenerator<string> {
 // ---------------------------------------------------------------------------
 
 describeIfFile(oboPath('uo.obo'))('UO (Units of Measurement)', () => {
-    const text = readFileSync(oboPath('uo.obo'), 'utf-8');
+    const getText = lazyRead(oboPath('uo.obo'));
 
     it('parses without throwing', () => {
-        expect(() => parseObo(text)).not.toThrow();
+        expect(() => parseObo(getText())).not.toThrow();
     });
 
     it('has correct header metadata', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         expect(doc.header.formatVersion).toBe('1.2');
         expect(doc.header.ontology).toBe('uo');
         expect(doc.header.dataVersion).toBeTruthy();
     });
 
     it('parses expected number of terms', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         expect(doc.terms.length).toBeGreaterThanOrEqual(500);
     });
 
     it('every term has a UO: id', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         for (const term of doc.terms) {
             expect(term.id).toBeTruthy();
             expect(term.id).toMatch(/^UO:/);
@@ -55,8 +65,8 @@ describeIfFile(oboPath('uo.obo'))('UO (Units of Measurement)', () => {
     });
 
     it('streaming produces identical results', async () => {
-        const doc = parseObo(text);
-        const stanzas = await collectStanzas(parseOboStream(singleChunk(text)));
+        const doc = parseObo(getText());
+        const stanzas = await collectStanzas(parseOboStream(singleChunk(getText())));
         const streamTerms = stanzas
             .filter((s): s is {type: 'term'; term: OboTerm} => s.type === 'term')
             .map((s) => s.term);
@@ -69,31 +79,31 @@ describeIfFile(oboPath('uo.obo'))('UO (Units of Measurement)', () => {
 // ---------------------------------------------------------------------------
 
 describeIfFile(oboPath('go.obo'))('GO (Gene Ontology)', () => {
-    const text = readFileSync(oboPath('go.obo'), 'utf-8');
+    const getText = lazyRead(oboPath('go.obo'));
 
     it('parses without throwing', () => {
-        expect(() => parseObo(text)).not.toThrow();
+        expect(() => parseObo(getText())).not.toThrow();
     });
 
     it('has correct header metadata', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         expect(doc.header.formatVersion).toBe('1.2');
         expect(doc.header.ontology).toBe('go');
         expect(doc.header.dataVersion).toBeTruthy();
     });
 
     it('parses >40,000 terms', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         expect(doc.terms.length).toBeGreaterThan(40000);
     });
 
     it('has no unparsed header tags', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         expect(doc.header.unparsedTags).toEqual([]);
     });
 
     it('has no unparsed stanza tags', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         for (const term of doc.terms) {
             expect(term.unparsedTags).toEqual([]);
         }
@@ -103,7 +113,7 @@ describeIfFile(oboPath('go.obo'))('GO (Gene Ontology)', () => {
     });
 
     it('parses header subsetDefs and synonymTypeDefs', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         expect(doc.header.subsetDefs.length).toBeGreaterThan(10);
         for (const sd of doc.header.subsetDefs) {
             expect(sd.id).toBeTruthy();
@@ -113,7 +123,7 @@ describeIfFile(oboPath('go.obo'))('GO (Gene Ontology)', () => {
     });
 
     it('parses header idSpaces', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         expect(doc.header.idSpaces.length).toBeGreaterThan(0);
         for (const is of doc.header.idSpaces) {
             expect(is.prefix).toBeTruthy();
@@ -122,7 +132,7 @@ describeIfFile(oboPath('go.obo'))('GO (Gene Ontology)', () => {
     });
 
     it('parses header property_values', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         expect(doc.header.propertyValues.length).toBeGreaterThan(0);
         for (const pv of doc.header.propertyValues) {
             expect(pv.property).toBeTruthy();
@@ -131,7 +141,7 @@ describeIfFile(oboPath('go.obo'))('GO (Gene Ontology)', () => {
     });
 
     it('every non-obsolete term has a definition', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         const active = doc.terms.filter((t) => !t.isObsolete);
         for (const term of active) {
             expect(term.definition).not.toBeNull();
@@ -140,7 +150,7 @@ describeIfFile(oboPath('go.obo'))('GO (Gene Ontology)', () => {
     });
 
     it('parses synonyms with scopes and xrefs', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         const withSyn = doc.terms.filter((t) => t.synonyms.length > 0);
         expect(withSyn.length).toBeGreaterThan(20000);
         for (const term of withSyn.slice(0, 100)) {
@@ -152,7 +162,7 @@ describeIfFile(oboPath('go.obo'))('GO (Gene Ontology)', () => {
     });
 
     it('parses is_a relationships', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         const withIsA = doc.terms.filter((t) => t.isA.length > 0);
         expect(withIsA.length).toBeGreaterThan(30000);
         for (const term of withIsA.slice(0, 100)) {
@@ -163,7 +173,7 @@ describeIfFile(oboPath('go.obo'))('GO (Gene Ontology)', () => {
     });
 
     it('parses named relationships', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         const withRel = doc.terms.filter((t) => t.relationships.length > 0);
         expect(withRel.length).toBeGreaterThan(10000);
         for (const term of withRel.slice(0, 50)) {
@@ -175,7 +185,7 @@ describeIfFile(oboPath('go.obo'))('GO (Gene Ontology)', () => {
     });
 
     it('detects obsolete terms with replaced_by and consider', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         const obsolete = doc.terms.filter((t) => t.isObsolete);
         expect(obsolete.length).toBeGreaterThan(5000);
         const withReplace = obsolete.filter((t) => t.replacedBy.length > 0);
@@ -185,7 +195,7 @@ describeIfFile(oboPath('go.obo'))('GO (Gene Ontology)', () => {
     });
 
     it('parses typedefs with relationship properties', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         expect(doc.typedefs.length).toBeGreaterThan(0);
         const transitive = doc.typedefs.filter((t) => t.isTransitive);
         expect(transitive.length).toBeGreaterThan(0);
@@ -201,8 +211,8 @@ describeIfFile(oboPath('go.obo'))('GO (Gene Ontology)', () => {
     });
 
     it('streaming produces identical term count', async () => {
-        const doc = parseObo(text);
-        const stanzas = await collectStanzas(parseOboStream(singleChunk(text)));
+        const doc = parseObo(getText());
+        const stanzas = await collectStanzas(parseOboStream(singleChunk(getText())));
         const streamTerms = stanzas.filter((s) => s.type === 'term');
         expect(streamTerms.length).toBe(doc.terms.length);
     });
@@ -213,14 +223,14 @@ describeIfFile(oboPath('go.obo'))('GO (Gene Ontology)', () => {
 // ---------------------------------------------------------------------------
 
 describeIfFile(oboPath('po.obo'))('PO (Plant Ontology)', () => {
-    const text = readFileSync(oboPath('po.obo'), 'utf-8');
+    const getText = lazyRead(oboPath('po.obo'));
 
     it('parses without throwing', () => {
-        expect(() => parseObo(text)).not.toThrow();
+        expect(() => parseObo(getText())).not.toThrow();
     });
 
     it('has no unparsed tags in any stanza', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         for (const term of doc.terms) {
             expect(term.unparsedTags).toEqual([]);
         }
@@ -230,11 +240,10 @@ describeIfFile(oboPath('po.obo'))('PO (Plant Ontology)', () => {
     });
 
     it('parses intersection_of components', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         const withIntersection = doc.terms.filter((t) => t.intersectionOf.length > 0);
         expect(withIntersection.length).toBeGreaterThan(50);
         for (const term of withIntersection) {
-            // Intersections should have at least a genus
             const genus = term.intersectionOf.filter((i) => i.predicate === null);
             expect(genus.length).toBeGreaterThanOrEqual(1);
             for (const comp of term.intersectionOf) {
@@ -244,13 +253,13 @@ describeIfFile(oboPath('po.obo'))('PO (Plant Ontology)', () => {
     });
 
     it('parses disjoint_from', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         const withDisjoint = doc.terms.filter((t) => t.disjointFrom.length > 0);
         expect(withDisjoint.length).toBeGreaterThan(10);
     });
 
     it('parses created_by and creation_date', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         const withCreator = doc.terms.filter((t) => t.createdBy !== null);
         expect(withCreator.length).toBeGreaterThan(500);
         const withDate = doc.terms.filter((t) => t.creationDate !== null);
@@ -258,7 +267,7 @@ describeIfFile(oboPath('po.obo'))('PO (Plant Ontology)', () => {
     });
 
     it('parses typedefs with inverse_of', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         const withInverse = doc.typedefs.filter((t) => t.inverseOf !== null);
         expect(withInverse.length).toBeGreaterThanOrEqual(1);
         for (const td of withInverse) {
@@ -267,20 +276,20 @@ describeIfFile(oboPath('po.obo'))('PO (Plant Ontology)', () => {
     });
 
     it('parses header synonymTypeDefs with scopes', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         expect(doc.header.synonymTypeDefs.length).toBeGreaterThan(0);
         const withScope = doc.header.synonymTypeDefs.filter((s) => s.scope !== null);
         expect(withScope.length).toBeGreaterThan(0);
     });
 
     it('parses treat-xrefs-as-is_a', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         expect(doc.header.treatXrefsAsIsA.length).toBeGreaterThan(0);
     });
 
     it('streaming produces identical results', async () => {
-        const doc = parseObo(text);
-        const stanzas = await collectStanzas(parseOboStream(singleChunk(text)));
+        const doc = parseObo(getText());
+        const stanzas = await collectStanzas(parseOboStream(singleChunk(getText())));
         const streamTerms = stanzas
             .filter((s): s is {type: 'term'; term: OboTerm} => s.type === 'term')
             .map((s) => s.term);
@@ -297,14 +306,14 @@ describeIfFile(oboPath('po.obo'))('PO (Plant Ontology)', () => {
 // ---------------------------------------------------------------------------
 
 describeIfFile(oboPath('pato.obo'))('PATO (Phenotype And Trait Ontology)', () => {
-    const text = readFileSync(oboPath('pato.obo'), 'utf-8');
+    const getText = lazyRead(oboPath('pato.obo'));
 
     it('parses without throwing', () => {
-        expect(() => parseObo(text)).not.toThrow();
+        expect(() => parseObo(getText())).not.toThrow();
     });
 
     it('has no unparsed tags in any stanza', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         for (const term of doc.terms) {
             expect(term.unparsedTags).toEqual([]);
         }
@@ -314,13 +323,13 @@ describeIfFile(oboPath('pato.obo'))('PATO (Phenotype And Trait Ontology)', () =>
     });
 
     it('parses typedefs with transitive_over', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         const withTransOver = doc.typedefs.filter((t) => t.transitiveOver.length > 0);
         expect(withTransOver.length).toBeGreaterThan(0);
     });
 
     it('parses typedefs with domain and range', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         const withDomain = doc.typedefs.filter((t) => t.domain !== null);
         expect(withDomain.length).toBeGreaterThan(0);
         const withRange = doc.typedefs.filter((t) => t.range !== null);
@@ -328,18 +337,18 @@ describeIfFile(oboPath('pato.obo'))('PATO (Phenotype And Trait Ontology)', () =>
     });
 
     it('parses many disjoint_from relationships', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         const withDisjoint = doc.terms.filter((t) => t.disjointFrom.length > 0);
         expect(withDisjoint.length).toBeGreaterThan(50);
     });
 
     it('parses header idSpaces', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         expect(doc.header.idSpaces.length).toBeGreaterThan(0);
     });
 
     it('parses property_values on terms', () => {
-        const doc = parseObo(text);
+        const doc = parseObo(getText());
         const withPV = doc.terms.filter((t) => t.propertyValues.length > 0);
         expect(withPV.length).toBeGreaterThan(500);
         for (const term of withPV.slice(0, 50)) {
@@ -351,8 +360,8 @@ describeIfFile(oboPath('pato.obo'))('PATO (Phenotype And Trait Ontology)', () =>
     });
 
     it('streaming produces identical results', async () => {
-        const doc = parseObo(text);
-        const stanzas = await collectStanzas(parseOboStream(singleChunk(text)));
+        const doc = parseObo(getText());
+        const stanzas = await collectStanzas(parseOboStream(singleChunk(getText())));
         const streamTerms = stanzas
             .filter((s): s is {type: 'term'; term: OboTerm} => s.type === 'term')
             .map((s) => s.term);
