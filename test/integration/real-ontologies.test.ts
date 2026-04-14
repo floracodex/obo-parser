@@ -3,9 +3,11 @@ import {readFileSync, existsSync} from 'fs';
 import {join} from 'path';
 import {parseObo} from '../../src/parse.js';
 import {parseOboStream} from '../../src/stream.js';
-import type {OboStanza, OboTerm} from '../../src/types.js';
+import type {OboStanza, OboTerm, OboTypedef} from '../../src/types.js';
 
-const UO_PATH = join(__dirname, 'uo.obo');
+function oboPath(name: string): string {
+    return join(__dirname, name);
+}
 
 const describeIfFile = (path: string) => (existsSync(path) ? describe : describe.skip);
 
@@ -21,8 +23,12 @@ async function* singleChunk(text: string): AsyncGenerator<string> {
     yield text;
 }
 
-describeIfFile(UO_PATH)('UO (Units of Measurement) ontology', () => {
-    const text = existsSync(UO_PATH) ? readFileSync(UO_PATH, 'utf-8') : '';
+// ---------------------------------------------------------------------------
+// UO — Units of Measurement (small, basic)
+// ---------------------------------------------------------------------------
+
+describeIfFile(oboPath('uo.obo'))('UO (Units of Measurement)', () => {
+    const text = readFileSync(oboPath('uo.obo'), 'utf-8');
 
     it('parses without throwing', () => {
         expect(() => parseObo(text)).not.toThrow();
@@ -35,14 +41,12 @@ describeIfFile(UO_PATH)('UO (Units of Measurement) ontology', () => {
         expect(doc.header.dataVersion).toBeTruthy();
     });
 
-    it('parses the expected number of terms', () => {
+    it('parses expected number of terms', () => {
         const doc = parseObo(text);
-        // UO has ~574 terms as of 2026-01-16
         expect(doc.terms.length).toBeGreaterThanOrEqual(500);
-        expect(doc.terms.length).toBeLessThan(1000);
     });
 
-    it('every term has an id', () => {
+    it('every term has a UO: id', () => {
         const doc = parseObo(text);
         for (const term of doc.terms) {
             expect(term.id).toBeTruthy();
@@ -50,41 +54,96 @@ describeIfFile(UO_PATH)('UO (Units of Measurement) ontology', () => {
         }
     });
 
-    it('most terms have a name', () => {
+    it('streaming produces identical results', async () => {
         const doc = parseObo(text);
-        const named = doc.terms.filter((t) => t.name !== null);
-        expect(named.length / doc.terms.length).toBeGreaterThan(0.99);
+        const stanzas = await collectStanzas(parseOboStream(singleChunk(text)));
+        const streamTerms = stanzas
+            .filter((s): s is {type: 'term'; term: OboTerm} => s.type === 'term')
+            .map((s) => s.term);
+        expect(streamTerms).toEqual(doc.terms);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// GO — Gene Ontology (large, exercises many features)
+// ---------------------------------------------------------------------------
+
+describeIfFile(oboPath('go.obo'))('GO (Gene Ontology)', () => {
+    const text = readFileSync(oboPath('go.obo'), 'utf-8');
+
+    it('parses without throwing', () => {
+        expect(() => parseObo(text)).not.toThrow();
     });
 
-    it('parses the root term correctly', () => {
+    it('has correct header metadata', () => {
         const doc = parseObo(text);
-        const root = doc.terms.find((t) => t.id === 'UO:0000000');
-        expect(root).toBeDefined();
-        expect(root!.name).toBe('unit');
-        expect(root!.definition).toBeDefined();
-        expect(root!.isA).toHaveLength(0);
+        expect(doc.header.formatVersion).toBe('1.2');
+        expect(doc.header.ontology).toBe('go');
+        expect(doc.header.dataVersion).toBeTruthy();
     });
 
-    it('parses a mid-hierarchy term with is_a', () => {
+    it('parses >40,000 terms', () => {
         const doc = parseObo(text);
-        const lengthUnit = doc.terms.find((t) => t.id === 'UO:0000001');
-        expect(lengthUnit).toBeDefined();
-        expect(lengthUnit!.name).toBe('length unit');
-        expect(lengthUnit!.isA.length).toBeGreaterThanOrEqual(1);
-        expect(lengthUnit!.isA[0].target).toBe('UO:0000000');
+        expect(doc.terms.length).toBeGreaterThan(40000);
     });
 
-    it('detects obsolete terms', () => {
+    it('has no unparsed header tags', () => {
         const doc = parseObo(text);
-        const obsolete = doc.terms.filter((t) => t.isObsolete);
-        expect(obsolete.length).toBeGreaterThanOrEqual(1);
+        expect(doc.header.unparsedTags).toEqual([]);
     });
 
-    it('parses synonyms', () => {
+    it('has no unparsed stanza tags', () => {
         const doc = parseObo(text);
-        const withSynonyms = doc.terms.filter((t) => t.synonyms.length > 0);
-        expect(withSynonyms.length).toBeGreaterThan(0);
-        for (const term of withSynonyms) {
+        for (const term of doc.terms) {
+            expect(term.unparsedTags).toEqual([]);
+        }
+        for (const td of doc.typedefs) {
+            expect(td.unparsedTags).toEqual([]);
+        }
+    });
+
+    it('parses header subsetDefs and synonymTypeDefs', () => {
+        const doc = parseObo(text);
+        expect(doc.header.subsetDefs.length).toBeGreaterThan(10);
+        for (const sd of doc.header.subsetDefs) {
+            expect(sd.id).toBeTruthy();
+            expect(sd.description).toBeTruthy();
+        }
+        expect(doc.header.synonymTypeDefs.length).toBeGreaterThan(0);
+    });
+
+    it('parses header idSpaces', () => {
+        const doc = parseObo(text);
+        expect(doc.header.idSpaces.length).toBeGreaterThan(0);
+        for (const is of doc.header.idSpaces) {
+            expect(is.prefix).toBeTruthy();
+            expect(is.uri).toBeTruthy();
+        }
+    });
+
+    it('parses header property_values', () => {
+        const doc = parseObo(text);
+        expect(doc.header.propertyValues.length).toBeGreaterThan(0);
+        for (const pv of doc.header.propertyValues) {
+            expect(pv.property).toBeTruthy();
+            expect(pv.value).toBeTruthy();
+        }
+    });
+
+    it('every non-obsolete term has a definition', () => {
+        const doc = parseObo(text);
+        const active = doc.terms.filter((t) => !t.isObsolete);
+        for (const term of active) {
+            expect(term.definition).not.toBeNull();
+            expect(term.definition!.text.length).toBeGreaterThan(0);
+        }
+    });
+
+    it('parses synonyms with scopes and xrefs', () => {
+        const doc = parseObo(text);
+        const withSyn = doc.terms.filter((t) => t.synonyms.length > 0);
+        expect(withSyn.length).toBeGreaterThan(20000);
+        for (const term of withSyn.slice(0, 100)) {
             for (const syn of term.synonyms) {
                 expect(syn.text).toBeTruthy();
                 expect(['EXACT', 'BROAD', 'NARROW', 'RELATED']).toContain(syn.scope);
@@ -92,18 +151,211 @@ describeIfFile(UO_PATH)('UO (Units of Measurement) ontology', () => {
         }
     });
 
+    it('parses is_a relationships', () => {
+        const doc = parseObo(text);
+        const withIsA = doc.terms.filter((t) => t.isA.length > 0);
+        expect(withIsA.length).toBeGreaterThan(30000);
+        for (const term of withIsA.slice(0, 100)) {
+            for (const isa of term.isA) {
+                expect(isa.target).toMatch(/^GO:/);
+            }
+        }
+    });
+
+    it('parses named relationships', () => {
+        const doc = parseObo(text);
+        const withRel = doc.terms.filter((t) => t.relationships.length > 0);
+        expect(withRel.length).toBeGreaterThan(10000);
+        for (const term of withRel.slice(0, 50)) {
+            for (const rel of term.relationships) {
+                expect(rel.predicate).toBeTruthy();
+                expect(rel.target).toMatch(/^GO:/);
+            }
+        }
+    });
+
+    it('detects obsolete terms with replaced_by and consider', () => {
+        const doc = parseObo(text);
+        const obsolete = doc.terms.filter((t) => t.isObsolete);
+        expect(obsolete.length).toBeGreaterThan(5000);
+        const withReplace = obsolete.filter((t) => t.replacedBy.length > 0);
+        const withConsider = obsolete.filter((t) => t.consider.length > 0);
+        expect(withReplace.length).toBeGreaterThan(1000);
+        expect(withConsider.length).toBeGreaterThan(1000);
+    });
+
+    it('parses typedefs with relationship properties', () => {
+        const doc = parseObo(text);
+        expect(doc.typedefs.length).toBeGreaterThan(0);
+        const transitive = doc.typedefs.filter((t) => t.isTransitive);
+        expect(transitive.length).toBeGreaterThan(0);
+        const withChain = doc.typedefs.filter((t) => t.holdsOverChain.length > 0);
+        expect(withChain.length).toBeGreaterThan(0);
+        for (const td of withChain) {
+            for (const chain of td.holdsOverChain) {
+                expect(chain).toHaveLength(2);
+                expect(chain[0]).toBeTruthy();
+                expect(chain[1]).toBeTruthy();
+            }
+        }
+    });
+
+    it('streaming produces identical term count', async () => {
+        const doc = parseObo(text);
+        const stanzas = await collectStanzas(parseOboStream(singleChunk(text)));
+        const streamTerms = stanzas.filter((s) => s.type === 'term');
+        expect(streamTerms.length).toBe(doc.terms.length);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// PO — Plant Ontology (intersection_of, disjoint_from, created_by)
+// ---------------------------------------------------------------------------
+
+describeIfFile(oboPath('po.obo'))('PO (Plant Ontology)', () => {
+    const text = readFileSync(oboPath('po.obo'), 'utf-8');
+
+    it('parses without throwing', () => {
+        expect(() => parseObo(text)).not.toThrow();
+    });
+
+    it('has no unparsed tags in any stanza', () => {
+        const doc = parseObo(text);
+        for (const term of doc.terms) {
+            expect(term.unparsedTags).toEqual([]);
+        }
+        for (const td of doc.typedefs) {
+            expect(td.unparsedTags).toEqual([]);
+        }
+    });
+
+    it('parses intersection_of components', () => {
+        const doc = parseObo(text);
+        const withIntersection = doc.terms.filter((t) => t.intersectionOf.length > 0);
+        expect(withIntersection.length).toBeGreaterThan(50);
+        for (const term of withIntersection) {
+            // Intersections should have at least a genus
+            const genus = term.intersectionOf.filter((i) => i.predicate === null);
+            expect(genus.length).toBeGreaterThanOrEqual(1);
+            for (const comp of term.intersectionOf) {
+                expect(comp.target).toBeTruthy();
+            }
+        }
+    });
+
+    it('parses disjoint_from', () => {
+        const doc = parseObo(text);
+        const withDisjoint = doc.terms.filter((t) => t.disjointFrom.length > 0);
+        expect(withDisjoint.length).toBeGreaterThan(10);
+    });
+
+    it('parses created_by and creation_date', () => {
+        const doc = parseObo(text);
+        const withCreator = doc.terms.filter((t) => t.createdBy !== null);
+        expect(withCreator.length).toBeGreaterThan(500);
+        const withDate = doc.terms.filter((t) => t.creationDate !== null);
+        expect(withDate.length).toBeGreaterThan(500);
+    });
+
+    it('parses typedefs with inverse_of', () => {
+        const doc = parseObo(text);
+        const withInverse = doc.typedefs.filter((t) => t.inverseOf !== null);
+        expect(withInverse.length).toBeGreaterThanOrEqual(1);
+        for (const td of withInverse) {
+            expect(td.inverseOf).toBeTruthy();
+        }
+    });
+
+    it('parses header synonymTypeDefs with scopes', () => {
+        const doc = parseObo(text);
+        expect(doc.header.synonymTypeDefs.length).toBeGreaterThan(0);
+        const withScope = doc.header.synonymTypeDefs.filter((s) => s.scope !== null);
+        expect(withScope.length).toBeGreaterThan(0);
+    });
+
+    it('parses treat-xrefs-as-is_a', () => {
+        const doc = parseObo(text);
+        expect(doc.header.treatXrefsAsIsA.length).toBeGreaterThan(0);
+    });
+
     it('streaming produces identical results', async () => {
         const doc = parseObo(text);
         const stanzas = await collectStanzas(parseOboStream(singleChunk(text)));
-
         const streamTerms = stanzas
             .filter((s): s is {type: 'term'; term: OboTerm} => s.type === 'term')
             .map((s) => s.term);
+        expect(streamTerms).toEqual(doc.terms);
+        const streamTypedefs = stanzas
+            .filter((s): s is {type: 'typedef'; typedef: OboTypedef} => s.type === 'typedef')
+            .map((s) => s.typedef);
+        expect(streamTypedefs).toEqual(doc.typedefs);
+    });
+});
 
-        expect(streamTerms.length).toBe(doc.terms.length);
+// ---------------------------------------------------------------------------
+// PATO — Phenotype And Trait Ontology (transitive_over, domain/range)
+// ---------------------------------------------------------------------------
 
-        // Spot-check a few terms for deep equality
-        expect(streamTerms[0]).toEqual(doc.terms[0]);
-        expect(streamTerms[streamTerms.length - 1]).toEqual(doc.terms[doc.terms.length - 1]);
+describeIfFile(oboPath('pato.obo'))('PATO (Phenotype And Trait Ontology)', () => {
+    const text = readFileSync(oboPath('pato.obo'), 'utf-8');
+
+    it('parses without throwing', () => {
+        expect(() => parseObo(text)).not.toThrow();
+    });
+
+    it('has no unparsed tags in any stanza', () => {
+        const doc = parseObo(text);
+        for (const term of doc.terms) {
+            expect(term.unparsedTags).toEqual([]);
+        }
+        for (const td of doc.typedefs) {
+            expect(td.unparsedTags).toEqual([]);
+        }
+    });
+
+    it('parses typedefs with transitive_over', () => {
+        const doc = parseObo(text);
+        const withTransOver = doc.typedefs.filter((t) => t.transitiveOver.length > 0);
+        expect(withTransOver.length).toBeGreaterThan(0);
+    });
+
+    it('parses typedefs with domain and range', () => {
+        const doc = parseObo(text);
+        const withDomain = doc.typedefs.filter((t) => t.domain !== null);
+        expect(withDomain.length).toBeGreaterThan(0);
+        const withRange = doc.typedefs.filter((t) => t.range !== null);
+        expect(withRange.length).toBeGreaterThan(0);
+    });
+
+    it('parses many disjoint_from relationships', () => {
+        const doc = parseObo(text);
+        const withDisjoint = doc.terms.filter((t) => t.disjointFrom.length > 0);
+        expect(withDisjoint.length).toBeGreaterThan(50);
+    });
+
+    it('parses header idSpaces', () => {
+        const doc = parseObo(text);
+        expect(doc.header.idSpaces.length).toBeGreaterThan(0);
+    });
+
+    it('parses property_values on terms', () => {
+        const doc = parseObo(text);
+        const withPV = doc.terms.filter((t) => t.propertyValues.length > 0);
+        expect(withPV.length).toBeGreaterThan(500);
+        for (const term of withPV.slice(0, 50)) {
+            for (const pv of term.propertyValues) {
+                expect(pv.property).toBeTruthy();
+                expect(pv.value).toBeTruthy();
+            }
+        }
+    });
+
+    it('streaming produces identical results', async () => {
+        const doc = parseObo(text);
+        const stanzas = await collectStanzas(parseOboStream(singleChunk(text)));
+        const streamTerms = stanzas
+            .filter((s): s is {type: 'term'; term: OboTerm} => s.type === 'term')
+            .map((s) => s.term);
+        expect(streamTerms).toEqual(doc.terms);
     });
 });
