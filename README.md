@@ -18,7 +18,7 @@ Built for real-world ontologies: Gene Ontology, Plant Ontology, PATO, ENVO, ChEB
 npm install @floracodex/obo-parser
 ```
 
-Requires Node.js 18 or later.
+Requires Node.js 20 or later.
 
 ## Quick start
 
