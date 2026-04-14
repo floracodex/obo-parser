@@ -1,0 +1,9 @@
+format-version: 1.2
+ontology: test
+
+[Term]
+id: TEST:0001
+name: test term
+def: "A definition with \"quoted text\" and a backslash \\ inside." [REF:1]
+synonym: "term with \"quotes\"" EXACT []
+comment: A comment with ! this part is stripped as a trailing comment
