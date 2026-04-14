@@ -1,6 +1,6 @@
 {
   "name": "@floracodex/obo-parser",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "A spec-complete OBO 1.4 format parser for TypeScript/JavaScript with streaming and string APIs",
   "type": "module",
   "exports": {
