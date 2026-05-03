@@ -33,7 +33,7 @@
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "typecheck:test": "tsc --noEmit -p tsconfig.test.json",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
     "format": "eslint . --fix",
     "test": "vitest run",
