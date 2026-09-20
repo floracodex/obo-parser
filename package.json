@@ -62,12 +62,12 @@
   },
   "homepage": "https://github.com/floracodex/obo-parser#readme",
   "devDependencies": {
-    "@floracodex/eslint-config": "^1.0.1",
-    "@types/node": "^25.6.0",
-    "@vitest/coverage-v8": "^4.1.5",
-    "eslint": "^10.2.1",
+    "@floracodex/eslint-config": "^1.2.0",
+    "@types/node": "^26.6.2",
+    "@vitest/coverage-v8": "^5.0.1",
+    "eslint": "^10.11.0",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.5"
+    "vitest": "^5.0.1"
   }
 }
