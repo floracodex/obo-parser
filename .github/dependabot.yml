@@ -5,6 +5,17 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    groups:
+      # @vitest/coverage-v8 peers vitest at an exact version; the two only ever move together.
+      vitest:
+        patterns:
+          - vitest
+          - "@vitest/*"
+    ignore:
+      # tsup's dts build injects baseUrl, which TypeScript 6 rejects (egoist/tsup#1413), and
+      # 7 is outside typescript-eslint's peer range. Drop this entry once tsup is replaced.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
